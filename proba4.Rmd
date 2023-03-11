@@ -1,0 +1,186 @@
+---
+title: ""
+date: "`r Sys.Date()`"
+output:
+  rmdformats::material:
+    highlight: kate
+---
+
+```{r setup, include=FALSE}
+## Global options
+knitr::opts_chunk$set(cache = TRUE)
+library(car)
+library(tidyverse)
+library(ggplot2)
+library(kableExtra)
+```
+
+# EJERCICIO 1
+
+## Seleccionar sólo las variables rango sexo y salario. 
+
+Primero se cargan los datos + un summary: 
+```{r}
+data(Salaries, package="carData")
+Salaries %>% summary()
+```
+
+
+```{r}
+Salaries %>% select(rank, sex, salary)  %>% head(6) %>% kable() %>% kable_material() %>% scroll_box()
+```
+
+# EJERCICIO 2
+
+## Filtrar por rango profesor.
+
+```{r}
+Salaries_Prof <- filter(Salaries, rank == "Prof")
+Salaries_Prof  %>% head(6) %>% kable() %>% kable_material() %>% scroll_box()
+```
+
+
+# EJERCICIO 3
+
+## Calcular medias por sexo (todos los datos).
+
+```{r}
+meds <- Salaries %>% group_by(sex) %>% summarise(med = mean(salary))
+meds %>% head(6) %>% kable() %>% kable_material() %>% scroll_box()
+```
+
+# EJERCICIO 4
+
+## Pasa el salario a miles con un decimal. 
+
+```{r}
+Salaries <- Salaries %>% 
+  mutate(Salaries, salary_M = round(salary * 0.001, 1))
+Salaries %>% head(6) %>% kable() %>% kable_material() %>% scroll_box()
+```
+
+# EJERCICIO 5
+
+## Grafica boxplots por rangos y por sexos.
+
+```{r}
+ggplot(Salaries) + geom_boxplot(aes(y = salary_M, fill = rank))
+ggplot(Salaries) + geom_boxplot(aes(y = salary_M, fill = sex))
+
+Salaries %>% mutate(Rank_sex = factor(paste(rank, "_", sex,sep = ""))) %>%
+  ggplot() + geom_boxplot(aes(y = salary_M, fill = Rank_sex))
+
+```
+
+# EJERCICIO 6
+
+## Grafica la nube de puntos de salario frente a años desde el doctorado y divídelo por sexos.
+
+```{r}
+ggplot(Salaries) + 
+  geom_point(aes(x = yrs.since.phd, y = salary, color = sex)) +
+  facet_wrap(~sex, ncol = 2)
+```
+
+
+# MAHALANOBIS
+
+```{r, include=FALSE}
+library(mvtnorm)
+library(GGally)
+library(ggforce)
+library(MASS)
+```
+
+
+```{r}
+
+set.seed(5)
+sigma <- rbind(c(1, 0.9), c(0.9, 1))
+mu <- c(5, 2)
+df <- as.data.frame(mvrnorm(n = 1000, mu = mu, Sigma = sigma))
+df <- df %>% rename(x=V1,y=V2)
+
+out <- data.frame(x=4, y=3)
+df <- rbind(df, out)
+p<- ggplot(df) + geom_point(aes(x=x, y=y)) + geom_point(data = out, aes(x=x, y=y), col = "red") +
+  geom_circle(aes(x0 = 5, y0 = 2, r = sqrt(2))) + theme_dark() + 
+  scale_color_viridis_c(option="D"); p
+```
+
+Lo que ha hecho el:
+
+```{r}
+set.seed(5)
+# Sigma matriz de varianzas y covarianzas
+sigma<-rbind(c(1,-0.8,-0.7), c(-0.8,1, 0.9), c(-0.7,0.9,1))
+
+sigma<-rbind( c(1, 0.9), c(0.9,1))
+# mu vector de medias
+mu<-c(5, 2)
+# Generamos mil datos de la variable binormal.
+df<-as.data.frame(mvrnorm(n=1000, mu=mu, Sigma=sigma))
+#Cambiamos el nombre a las variables 
+df <- df %>% rename(x=V1,y=V2)
+```
+
+
+Calculamos el vector de medias y añadimos un último punto que será nuestro outlier. Este punto no será extraño desde el punto de vista euclidiano pero sí desde el punto de vista de la distancia de mahalanobis.
+```{r}
+#Construimos la media
+meds <- df %>% summarize(mx=mean(x),my=mean(y))
+
+#Añadimos el punto extremo para mahalanobis pero no raro desde el punto de vista euclidiano.
+
+out <- data.frame(x=4,y=3)
+df <- rbind(df,out)
+
+#Distancia desde el centro al punto extremo.
+dist_e <- sqrt(sum((meds-out)^2))
+```
+
+
+
+Calculamos la distancia:
+```{r}
+#cada punto al centro.
+df$Maha <- mahalanobis(x=df,center=mu,cov=sigma)
+```
+
+
+Generamos nube de puntos: 
+
+```{r}
+#Pintamos la nube de puntos y el punto medio
+
+g <- ggplot(df)+geom_point(aes(x=x,y=y))
+g
+```
+Punto de interés + circunferencia: 
+
+```{r}
+ g+geom_point(data=meds,aes(x=mx,y=my),col="blue",size=2)+
+  geom_point(data=out,aes(x=x,y=y),col="blue",size=2)+
+  geom_circle(data=meds,aes(x0=mx,y0=my,r=dist_e))+coord_fixed()
+```
+
+El último parámetro (coord_fixed()) unifica los ejes y evita la distorsión del gráfico.\
+
+Dibujarlo bonito:
+
+```{r}
+g + geom_point(aes(x=x,y=y,color=Maha)) + scale_color_viridis_c(option="C")
+
+```
+
+
+```{r}
+# Color de fondo y de texto
+fd <- "#67585c"
+txt <- "#f9cacc"
+#Gráfico de todos los datos Medios heatmaps
+colors <- colorRampPalette(c( "#255e42","#3a9065", "#afb749","#deed21","#ed7b21", "#ed2159"))
+g <- ggplot(df)+geom_point(aes(x=x,y=y)) + geom_point(aes(x=x,y=y,color=Maha)) + scale_color_gradientn(colours = colors(60))+
+  geom_point(data=meds,aes(x=mx,y=my),col="blue",size=2)+geom_circle(data=meds,aes(x0=mx,y0=my,r=dist_e),color=txt)+coord_fixed(); g
+```
+
